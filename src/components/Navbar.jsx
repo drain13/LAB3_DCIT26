@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-
+  function Navbar() {
   function getTabStyle({ isActive }) {
     if (isActive) {
       return "flex-1 py-2 text-center text-[13px] font-semibold text-[#007AFF]";
