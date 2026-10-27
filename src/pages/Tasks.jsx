@@ -1,483 +1,279 @@
+import { useState } from "react";
+import TaskForm from "../components/TaskForm.jsx";
+import TaskItem from "../components/TaskItem.jsx";
 
-import { useState, useEffect } from "react";
+const dropdownStyle =
+  "w-full rounded-xl border border-gray-300 bg-white px-3 py-3 text-black [color-scheme:light] focus:border-[#007AFF] focus:ring-2 focus:ring-blue-200 focus:outline-none";
 
-const categories = ["School", "Personal", "Work"];
-const priorities = ["High", "Medium", "Low"];
+
 const priorityOrder = { High: 0, Medium: 1, Low: 2 };
 
-const priorityStyles = {
-  High: "bg-red-50 text-red-700",
-  Medium: "bg-amber-50 text-amber-700",
-  Low: "bg-emerald-50 text-emerald-700",
-};
-
-function formatDate(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return year + "-" + month + "-" + day;
-}
-
-function getDateFromToday(n) {
-  const date = new Date();
-  date.setDate(date.getDate() + n);
-  return formatDate(date);
-}
-
-function getDaysLeft(deadline) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const due = new Date(deadline + "T00:00:00");
-  return Math.round((due - today) / (1000 * 60 * 60 * 24));
-}
-
-function getDeadlineText(deadline) {
-  const days = getDaysLeft(deadline);
-  if (days < 0) return Math.abs(days) + " day(s) overdue";
-  if (days === 0) return "Due today";
-  if (days === 1) return "Due tomorrow";
-  return days + " days left";
-}
-
-function prettyDate(deadline) {
-  const date = new Date(deadline + "T00:00:00");
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function Tasks() {
-  const [tasks, setTasks] = useState(() => {
-    const saved = localStorage.getItem("tasks");
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  const [title, setTitle] = useState("");
-  const [deadline, setDeadline] = useState("");
-  const [category, setCategory] = useState("School");
-  const [priority, setPriority] = useState("Medium");
-  const [editingId, setEditingId] = useState(null);
-  const [error, setError] = useState("");
-
-  const [filter, setFilter] = useState("all");
-  const [categoryFilter, setCategoryFilter] = useState("All");
+function Tasks({ tasks, groups, onAddTask, onUpdateTask, onToggle, onDelete, onClearDone }) {
+  const [editingTask, setEditingTask] = useState(null); // the task being edited
+  const [filter, setFilter] = useState("all"); // all, active or done
+  const [groupFilter, setGroupFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("deadline");
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
-  useEffect(() => {
-    localStorage.setItem("tasks", JSON.stringify(tasks));
-  }, [tasks]);
+  
+  let firstGroupId = "";
+  if (groups.length > 0) {
+    firstGroupId = groups[0].id;
+  }
 
-  const resetForm = () => {
-    setTitle("");
-    setDeadline("");
-    setCategory("School");
-    setPriority("Medium");
-    setEditingId(null);
-    setError("");
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-
-    if (title.trim() === "") {
-      setError("Please enter a task title.");
-      return;
-    }
-    if (deadline === "") {
-      setError("Please choose a deadline.");
-      return;
-    }
-
-    if (editingId) {
-      const updated = tasks.map((task) =>
-        task.id === editingId
-          ? { ...task, title: title.trim(), deadline, category, priority }
-          : task
-      );
-      setTasks(updated);
+  
+  function handleSave(data) {
+    if (editingTask) {
+      onUpdateTask(editingTask.id, data);
+      setEditingTask(null);
     } else {
-      const newTask = {
-        id: Date.now(),
-        title: title.trim(),
-        deadline,
-        category,
-        priority,
-        completed: false,
-      };
-      setTasks([...tasks, newTask]);
+      onAddTask(data);
     }
+  }
 
-    resetForm();
-  };
-
-  const toggleTask = (id) => {
-    setTasks(
-      tasks.map((task) =>
-        task.id === id ? { ...task, completed: !task.completed } : task
-      )
-    );
-  };
-
-  const deleteTask = (id) => {
-    if (!window.confirm("Delete this task?")) return;
-    setTasks(tasks.filter((task) => task.id !== id));
-    if (editingId === id) resetForm();
-  };
-
-  const startEdit = (task) => {
-    setEditingId(task.id);
-    setTitle(task.title);
-    setDeadline(task.deadline);
-    setCategory(task.category);
-    setPriority(task.priority || "Medium");
-    setError("");
+  function startEdit(task) {
+    setEditingTask(task);
     window.scrollTo({ top: 0, behavior: "smooth" });
-  };
+  }
 
-  const clearCompleted = () => {
-    if (!window.confirm("Remove all completed tasks?")) return;
-    setTasks(tasks.filter((task) => !task.completed));
-  };
+  function handleDelete(id) {
+    onDelete(id);
+    
+    if (editingTask && editingTask.id === id) {
+      setEditingTask(null);
+    }
+  }
 
-  const visibleTasks = tasks
-    .filter((task) => {
-      if (filter === "active" && task.completed) return false;
-      if (filter === "done" && !task.completed) return false;
-      if (categoryFilter !== "All" && task.category !== categoryFilter)
-        return false;
-      if (!task.title.toLowerCase().includes(search.toLowerCase()))
-        return false;
-      return true;
-    })
-    .sort((a, b) => {
-      if (a.completed !== b.completed) return a.completed ? 1 : -1;
+  function getGroupName(groupId) {
+    const group = groups.find((g) => g.id === groupId);
+    if (group) {
+      return group.name;
+    } else {
+      return "";
+    }
+  }
 
-      if (sortBy === "priority") {
-        return priorityOrder[a.priority] - priorityOrder[b.priority];
-      }
-      if (sortBy === "newest") {
-        return b.id - a.id;
-      }
-      return a.deadline.localeCompare(b.deadline);
-    });
-
+  const todayText = new Date().toLocaleDateString("en-CA");
   const total = tasks.length;
-  const doneCount = tasks.filter((task) => task.completed).length;
+  const doneCount = tasks.filter((task) => task.done === true).length;
   const activeCount = total - doneCount;
   const overdueCount = tasks.filter(
-    (task) => !task.completed && getDaysLeft(task.deadline) < 0
+    (task) => task.done === false && task.deadline < todayText
   ).length;
-  const percent = total === 0 ? 0 : Math.round((doneCount / total) * 100);
 
-  const filters = [
-    { value: "all", label: "All", count: total },
-    { value: "active", label: "Active", count: activeCount },
-    { value: "done", label: "Done", count: doneCount },
-  ];
+  let percent = 0;
+  if (total > 0) {
+    percent = Math.round((doneCount / total) * 100);
+  }
 
-  const today = new Date().toLocaleDateString("en-US", {
+
+  const visibleTasks = [];
+  for (let i = 0; i < tasks.length; i++) {
+    const task = tasks[i];
+    let show = true;
+
+    if (filter === "active" && task.done === true) {
+      show = false;
+    }
+    if (filter === "done" && task.done === false) {
+      show = false;
+    }
+    if (groupFilter !== "all" && task.groupId !== groupFilter) {
+      show = false;
+    }
+    if (!task.title.toLowerCase().includes(search.toLowerCase())) {
+      show = false;
+    }
+
+    if (show) {
+      visibleTasks.push(task);
+    }
+  }
+
+  
+  function sortTasks(a, b) {
+    // finished tasks go to the bottom
+    if (a.done !== b.done) {
+      if (a.done) {
+        return 1;
+      } else {
+        return -1;
+      }
+    }
+    if (sortBy === "priority") {
+      return priorityOrder[a.priority] - priorityOrder[b.priority];
+    }
+    if (sortBy === "newest") {
+      return b.id - a.id;
+    }
+    // sort by deadline (nearest first)
+    if (a.deadline < b.deadline) return -1;
+    if (a.deadline > b.deadline) return 1;
+    return 0;
+  }
+  visibleTasks.sort(sortTasks);
+
+  
+  function getFilterStyle(name) {
+    if (filter === name) {
+      return "rounded-lg bg-white py-2 text-sm font-semibold text-black shadow-sm";
+    } else {
+      return "rounded-lg py-2 text-sm text-gray-600";
+    }
+  }
+
+  const dateWords = new Date().toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",
     day: "numeric",
   });
 
   return (
-    <div className="min-h-screen bg-stone-50 text-stone-800">
-      <div className="max-w-3xl mx-auto px-4 py-8 sm:py-12">
-        <header className="mb-6">
-          <p className="text-sm text-stone-500">{today}</p>
-          <h1 className="text-3xl font-semibold mt-1">My Tasks</h1>
-        </header>
+    <div className="p-5 pb-28">
+      <div className="max-w-2xl mx-auto">
+        <p className="text-gray-500 mt-6">{dateWords}</p>
+        <h1 className="text-4xl font-bold text-black">My Tasks</h1>
+        <p className="text-gray-500 mb-6">Add, edit, finish, and delete your tasks.</p>
 
-        <section className="bg-white border border-stone-200 rounded-xl p-4 sm:p-5 mb-6">
-          <div className="grid grid-cols-3 gap-3 text-center">
-            <div>
-              <p className="text-2xl font-semibold">{activeCount}</p>
-              <p className="text-xs text-stone-500">To do</p>
-            </div>
-            <div>
-              <p className="text-2xl font-semibold">{doneCount}</p>
-              <p className="text-xs text-stone-500">Completed</p>
-            </div>
-            <div>
-              <p
-                className={
-                  "text-2xl font-semibold " +
-                  (overdueCount > 0 ? "text-red-600" : "")
-                }
-              >
-                {overdueCount}
-              </p>
-              <p className="text-xs text-stone-500">Overdue</p>
-            </div>
+        <div className="grid grid-cols-3 gap-3 mb-3">
+          <div className="bg-white rounded-2xl shadow-sm p-4 text-center">
+            <p className="text-3xl font-bold text-[#007AFF]">{activeCount}</p>
+            <p className="text-xs text-gray-500 mt-1">To do</p>
           </div>
-
-          <div className="mt-4">
-            <div className="flex justify-between text-xs text-stone-500 mb-1">
-              <span>Progress</span>
-              <span>{percent}%</span>
-            </div>
-            <div className="h-2 bg-stone-100 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-indigo-600 rounded-full transition-all duration-300"
-                style={{ width: percent + "%" }}
-              ></div>
-            </div>
+          <div className="bg-white rounded-2xl shadow-sm p-4 text-center">
+            <p className="text-3xl font-bold text-[#34C759]">{doneCount}</p>
+            <p className="text-xs text-gray-500 mt-1">Completed</p>
           </div>
-        </section>
-
-        <form
-          onSubmit={handleSubmit}
-          className="bg-white border border-stone-200 rounded-xl p-4 sm:p-5 mb-6"
-        >
-          <h2 className="text-sm font-medium mb-3">
-            {editingId ? "Edit task" : "Add a new task"}
-          </h2>
-
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="What do you need to do?"
-            className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-600"
-          />
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
-            <div>
-              <label className="block text-xs text-stone-500 mb-1">
-                Deadline
-              </label>
-              <input
-                type="date"
-                value={deadline}
-                onChange={(e) => setDeadline(e.target.value)}
-                className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-600"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-stone-500 mb-1">
-                Category
-              </label>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-indigo-600"
-              >
-                {categories.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-stone-500 mb-1">
-                Priority
-              </label>
-              <select
-                value={priority}
-                onChange={(e) => setPriority(e.target.value)}
-                className="w-full border border-stone-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-indigo-600"
-              >
-                {priorities.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div className="bg-white rounded-2xl shadow-sm p-4 text-center">
+            <p className="text-3xl font-bold text-red-500">{overdueCount}</p>
+            <p className="text-xs text-gray-500 mt-1">Overdue</p>
           </div>
+        </div>
 
-          <div className="flex flex-wrap items-center gap-2 mt-3">
-            <span className="text-xs text-stone-500">Quick set:</span>
-            <button
-              type="button"
-              onClick={() => setDeadline(getDateFromToday(0))}
-              className="text-xs px-2.5 py-1 rounded-full border border-stone-300 hover:bg-stone-100"
-            >
-              Today
-            </button>
-            <button
-              type="button"
-              onClick={() => setDeadline(getDateFromToday(1))}
-              className="text-xs px-2.5 py-1 rounded-full border border-stone-300 hover:bg-stone-100"
-            >
-              Tomorrow
-            </button>
-            <button
-              type="button"
-              onClick={() => setDeadline(getDateFromToday(7))}
-              className="text-xs px-2.5 py-1 rounded-full border border-stone-300 hover:bg-stone-100"
-            >
-              Next week
-            </button>
+        <div className="bg-white rounded-2xl shadow-sm p-4 mb-4">
+          <div className="mb-1 flex justify-between text-sm text-gray-500">
+            <span>Progress</span>
+            <span>{percent}%</span>
           </div>
-
-          {error && <p className="text-sm text-red-600 mt-3">{error}</p>}
-
-          <div className="flex gap-2 mt-4">
-            <button
-              type="submit"
-              className="bg-indigo-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-indigo-700"
-            >
-              {editingId ? "Save changes" : "Add task"}
-            </button>
-            {editingId && (
-              <button
-                type="button"
-                onClick={resetForm}
-                className="text-sm px-4 py-2 rounded-lg border border-stone-300 hover:bg-stone-100"
-              >
-                Cancel
-              </button>
-            )}
+          <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
+            <div className="h-2 rounded-full bg-[#34C759]" style={{ width: percent + "%" }}></div>
           </div>
-        </form>
+        </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
+        <TaskForm
+          key={editingTask ? editingTask.id : "new"}
+          groups={groups}
+          defaultGroup={firstGroupId}
+          showGroupDropdown={true}
+          taskToEdit={editingTask}
+          onSave={handleSave}
+          onCancelEdit={() => setEditingTask(null)}
+        />
+
+        <div className="grid gap-2 mb-3">
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search tasks..."
-            className="border border-stone-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-indigo-600"
+            placeholder="🔍 Search tasks..."
+            className={dropdownStyle}
           />
-          <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className="border border-stone-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-indigo-600"
-          >
-            <option value="All">All categories</option>
-            {categories.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat}
-              </option>
-            ))}
-          </select>
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
-            className="border border-stone-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-indigo-600"
-          >
-            <option value="deadline">Sort by deadline</option>
-            <option value="priority">Sort by priority</option>
-            <option value="newest">Sort by newest</option>
-          </select>
+          <div className="grid grid-cols-2 gap-2">
+            <select
+              value={groupFilter}
+              onChange={(e) => setGroupFilter(e.target.value)}
+              className={dropdownStyle}
+            >
+              <option value="all">All groups</option>
+              {groups.map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.name}
+                </option>
+              ))}
+            </select>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className={dropdownStyle}
+            >
+              <option value="deadline">Sort by deadline</option>
+              <option value="priority">Sort by priority</option>
+              <option value="newest">Sort by newest</option>
+            </select>
+          </div>
         </div>
 
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex gap-1">
-            {filters.map((f) => (
-              <button
-                key={f.value}
-                onClick={() => setFilter(f.value)}
-                className={
-                  "text-sm px-3 py-1.5 rounded-lg " +
-                  (filter === f.value
-                    ? "bg-stone-800 text-white"
-                    : "text-stone-600 hover:bg-stone-200")
-                }
-              >
-                {f.label} ({f.count})
-              </button>
-            ))}
-          </div>
+        <div className="grid grid-cols-3 gap-1 rounded-xl bg-gray-200 p-1 mb-3">
+          <button onClick={() => setFilter("all")} className={getFilterStyle("all")}>
+            All ({total})
+          </button>
+          <button onClick={() => setFilter("active")} className={getFilterStyle("active")}>
+            Not Done ({activeCount})
+          </button>
+          <button onClick={() => setFilter("done")} className={getFilterStyle("done")}>
+            Done ({doneCount})
+          </button>
+        </div>
 
-          {doneCount > 0 && (
+        {doneCount > 0 && (
+          <div className="mb-3 text-right">
             <button
-              onClick={clearCompleted}
-              className="text-xs text-stone-500 hover:text-red-600"
+              onClick={() => setShowClearConfirm(true)}
+              className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-red-500 shadow-sm active:opacity-70"
             >
-              Clear done
+              Clear done tasks
             </button>
+          </div>
+        )}
+
+        {showClearConfirm && (
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 mb-3">
+            <p className="font-semibold text-red-800">Remove all completed tasks?</p>
+            <div className="mt-3 flex gap-2">
+              <button
+                onClick={() => {
+                  onClearDone();
+                  setShowClearConfirm(false);
+                }}
+                className="rounded-xl bg-red-500 px-4 py-2 font-semibold text-white active:opacity-70"
+              >
+                Yes, remove
+              </button>
+              <button
+                onClick={() => setShowClearConfirm(false)}
+                className="rounded-xl bg-white px-4 py-2 font-semibold text-gray-800 active:opacity-70"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        <p className="text-sm text-gray-500 uppercase ml-3 mb-2">Tasks</p>
+
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+          {visibleTasks.length === 0 ? (
+            <p className="p-4 text-gray-500">
+              {total === 0
+                ? "No tasks yet. Add your first one above."
+                : "No tasks match your search or filter."}
+            </p>
+          ) : (
+            <ul>
+              {visibleTasks.map((task) => (
+                <TaskItem
+                  key={task.id}
+                  task={task}
+                  groupName={getGroupName(task.groupId)}
+                  onToggle={onToggle}
+                  onEdit={startEdit}
+                  onDelete={handleDelete}
+                />
+              ))}
+            </ul>
           )}
         </div>
-
-        {visibleTasks.length === 0 ? (
-          <div className="text-center text-sm text-stone-500 border border-dashed border-stone-300 rounded-xl py-12">
-            {total === 0
-              ? "No tasks yet. Add your first one above."
-              : "No tasks match your search or filter."}
-          </div>
-        ) : (
-          <ul className="space-y-2">
-            {visibleTasks.map((task) => {
-              const days = getDaysLeft(task.deadline);
-              const isOverdue = !task.completed && days < 0;
-              const isSoon = !task.completed && days >= 0 && days <= 2;
-
-              let deadlineColor = "text-stone-500";
-              if (isOverdue) deadlineColor = "text-red-600";
-              else if (isSoon) deadlineColor = "text-amber-600";
-
-              return (
-                <li
-                  key={task.id}
-                  className={
-                    "bg-white border rounded-xl p-3 sm:p-4 flex items-start gap-3 " +
-                    (isOverdue ? "border-red-200" : "border-stone-200")
-                  }
-                >
-                  <input
-                    type="checkbox"
-                    checked={task.completed}
-                    onChange={() => toggleTask(task.id)}
-                    className="mt-1 h-4 w-4 accent-indigo-600"
-                  />
-
-                  <div className="flex-1 min-w-0">
-                    <p
-                      className={
-                        "text-sm font-medium break-words " +
-                        (task.completed ? "line-through text-stone-400" : "")
-                      }
-                    >
-                      {task.title}
-                    </p>
-
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs mt-1.5">
-                      <span
-                        className={
-                          "px-2 py-0.5 rounded-full " +
-                          priorityStyles[task.priority || "Medium"]
-                        }
-                      >
-                        {task.priority || "Medium"}
-                      </span>
-                      <span className="text-stone-500">{task.category}</span>
-                      <span className="text-stone-500">
-                        {prettyDate(task.deadline)}
-                      </span>
-                      {!task.completed && (
-                        <span className={deadlineColor}>
-                          {getDeadlineText(task.deadline)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3 text-xs">
-                    <button
-                      onClick={() => startEdit(task)}
-                      className="text-stone-500 hover:text-indigo-600"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => deleteTask(task.id)}
-                      className="text-stone-500 hover:text-red-600"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
       </div>
     </div>
   );
