@@ -1,11 +1,11 @@
 import { Link } from "react-router-dom";
 
-// TODO: change these to the real names of your group members (max 4)
+
 const developers = [
-  { name: "Adrian Mabuti", role: "Project lead, routing and deployment" },
+  { name: "Adrian Mabuti", role: "Routing and deployment" },
   { name: "Ryan Obedientes", role: "Task list and Done / Not Done features" },
-  { name: "Richie Mapa", role: "Task groups pages and dynamic routes" },
-  { name: "Christian Fermin", role: "Dashboard, User Guide and styling" },
+  { name: "Richie Mapa", role: "Task groups pages" },
+  { name: "Christian Fermin", role: "Dashboard and styling" },
 ];
 
 function Developers() {
